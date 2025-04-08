@@ -1,4 +1,3 @@
-#define _CRT_SECURE_NO_WARNINGS 1
 #include <vector>
 
 #define STB_IMAGE_WRITE_IMPLEMENTATION
@@ -9,45 +8,26 @@
 
 #include <iostream>
 
-#define PI 3.14159265359
+#define M_PI 3.14159265359
 
 double sqr( double x) {
 	return x * x;
 }
 
-class Vector {
-public:
-	explicit Vector(double x = 0, double y = 0, double z = 0) {
-		data[0] = x;
-		data[1] = y;
-		data[2] = z;
-	}
-	double norm2() const {
-		return data[0] * data[0] + data[1] * data[1] + data[2] * data[2];
-	}
-	double norm() const {
-		return sqrt(norm2());
-	}
-	void normalize() {
-		double n = norm();
-		data[0] /= n;
-		data[1] /= n;
-		data[2] /= n;
-	}
-	double operator[](int i) const { return data[i]; };
-	double operator[](int i) { return data[i]; };
-	double data[3];
+#include <random>
+#include "Vector.h"
+#include "Ray.h"
+#include "Sphere.h"
 
-	int maximum() {
-		if ( data[0] >= data[1] && data[0] >= data[2] ) {
-			return 0;
-		}
-		if ( data[1] >= data[0] && data[1] >= data[2] ) {
-			return 1;
-		}
-		return 2;
-	}
-};
+static std::default_random_engine engine(10);  //random seed = 10
+static std::uniform_real_distribution<double> uniform(0, 1);
+
+void boxMuller( double stdev, double &x, double &y ){
+	double r1 = uniform( engine );
+	double r2 = uniform( engine );
+	x = sqrt( -2 * log(r1)) * cos( 2 * M_PI * r2 ) * stdev;
+	y = sqrt( -2 * log(r1)) * sin( 2 * M_PI * r2 ) * stdev;
+}
 
 Vector operator+(const Vector& a, const Vector& b) {
 	return Vector(a[0] + b[0], a[1] + b[1], a[2] + b[2]);
@@ -71,108 +51,275 @@ Vector cross(const Vector& a, const Vector& b) {
 	return Vector(a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]);
 }
 
-class Ray {
-	public:
-		Ray( const Vector& O, const Vector& u) : origin(O), u(u) {};
-		Vector origin;
-		Vector u;
-	};
+Vector operator*( const Vector& a, const Vector& b ) {
+    return Vector( a[0] * b[0], a[1] * b[1], a[2] * b[2] );
+}
 
-class Sphere {
-public:
-	Sphere( const Vector& C, double R) : C(C), R(R) {};
-	bool intersect( const Ray& r, Vector &P, Vector &N ){
-		double delta = sqr(dot(r.u, r.origin - C )) - ( r.origin - C).norm2() + sqr(R);
-		if ( delta < 0 ) return false;
-		double x = dot(r.u, C - r.origin);
-		double t1 = x - sqrt(delta);
-		double t2 = x + sqrt(delta);
-		if ( t2 < 0 ) return false;
-		double T;
-		if ( t1 > 0 )
-			T = t1;
-		else
-			T = t2;
-		
-		P = r.origin + T * r.u;
-		N = ( P - C ); //.normalize();
-		N.normalize();
-		return true;
+class Scene{
+	//int Shadow_effect(const Scene& scene, const Vector& P, Vector light_pos);
+	public:
+	std::vector<Sphere> objects;
+	void add(const Sphere &s) { objects.push_back(s); }
+	bool intersect( const Ray& r, Vector &P, Vector &N, int& object_id, Vector& color ) {
+		bool result = false;
+		//for this part I received a bit of help from a friend
+		double t_min = std::numeric_limits<double>::max();
+
+		for ( int i = 0; i < objects.size(); i++ ){
+			Vector localP, localN;
+			if ( objects[i]. intersect(r, localP, localN )) {
+				double t = ( localP - r.origin ).norm();
+				//result = true;
+				if( t < t_min ){
+					t_min = t;
+					P = localP;
+					N = localN;
+					object_id = i;
+					result = true;
+					color = objects[i].color;
+				}
+			}
+		}
+		return result;
 	}
-	Vector C;
-	double R;
+
+	Vector cosineFunction( const Vector& N ) {
+		//Vector N;
+		double r1 = uniform( engine );
+		double r2 = uniform( engine );
+
+		double x = cos( 2 * M_PI * r1 ) * sqrt( 1 - r2 );
+		double y = sin( 2 * M_PI * r1 ) * sqrt( 1 - r2 );
+		double z = sqrt( r2 );
+
+		//done during lecture:
+		Vector T1, T2;
+		if ( abs( N[0] ) <= abs( N[1] ) && abs( N[0] ) <= abs( N[2] ) )
+			T1 = Vector (0, -N[2], N[1] );
+		else if ( abs( N[1] ) <= abs( N[0] ) && abs( N[1] ) <= abs( N[2] ) ) 
+			T1 = Vector( -N[2], 0, N[0]);
+		else
+			T1 = Vector ( -N[1], N[0], 0 );
+		
+		T1.normalize();
+		//T2 = dot( N, T1 );
+		T2 = cross( N, T1 );
+		return x * T1 + y * T2 + z * N;
+	}
+
+	Vector getColour(const Ray& ray, int ray_depth, Vector light_pos, double I) {
+		Vector P, N, colour;
+		int id;
+		int object_id;
+
+		if ( ray_depth <= 0) return Vector(0, 0, 0);
+	
+		if(intersect(ray, P, N, object_id, colour)) {
+			Sphere sph = objects[object_id];
+			//in the case it is transparent we need to have a separate case
+			if (sph.transparent == true) {
+				Vector i = ray.u, normal_vec = N;
+				double n1, n2; //these represent the refr indices and we have to give different values for them depending on the situation
+				double angle_i = dot( i, N );
+				bool condition;  //supposes dot(i, N) < 0 in the lectur enotes, we change the mediums
+				if ( angle_i < 0 )
+					condition = true;
+				else
+					condition = false;
+				
+				//now we treat the cases if it enters in the medium or not
+				if ( condition == true ) //from air to glass
+					n1 = 1.0, n2 = 1.5;   //n1 = air, n2 = glass, according to lecture notes
+				else {  //glass to air
+					n1 = 1.5, n2 = 1.0;
+					normal_vec = ( -1.0 ) * N;
+					angle_i = ( -1 ) * angle_i;
+				}
+				
+				double computation;
+				computation = 1.0 - ( n1 / n2 ) * ( n1 / n2 ) * ( 1.0 - angle_i * angle_i );
+				
+				if ( computation < 0) {
+					//slide 37
+					Vector direction_of_reflection = i - 2 * dot( i, normal_vec ) * normal_vec;
+					direction_of_reflection.normalize();
+					Ray newRay( P + 1e-4 * direction_of_reflection, direction_of_reflection );
+					
+					return getColour( newRay, ray_depth - 1, light_pos, I );
+				} 
+				else {
+					double t_N = -sqrt( computation );//slide 39
+					Vector computation2 = i - dot( i, normal_vec ) * normal_vec;
+					Vector t_T = ( n1 / n2) * computation2;
+					Vector direction_of_refraction = t_N * normal_vec + t_T; //* computation2
+					direction_of_refraction.normalize();
+					Ray newRay( P + 1e-4 * direction_of_refraction, direction_of_refraction );
+					
+					return getColour( newRay, ray_depth - 1, light_pos, I );
+				}
+			}
+			else if ( sph.mirror == false ) {  //we need to add both direct and indirect lighting
+				
+				Vector direct(0, 0, 0 ), indirect(0, 0, 0);
+				if ( Shadow_effect( P, light_pos ) != 1 ) {
+					double distance = ( light_pos - P ).norm2();
+					//long formula from the lecture notes:
+					double attenuation = I / ( 4 * M_PI * distance );
+					Vector material = colour / M_PI;
+					double product = dot( N, (light_pos - P ) / (light_pos - P).norm() );
+					double solid_angle = std::max( 0.0, product );
+
+					direct = attenuation * material* solid_angle;
+				}
+
+				if( ray_depth > 1 ) {
+					Vector directionRandom = cosineFunction( N );  //random direction
+					Ray ray_indirect( P + 1e-4 * N, directionRandom );
+					Vector colorIndirect = getColour( ray_indirect, ray_depth - 1, light_pos, I );
+
+					indirect = colour * colorIndirect;
+				}
+
+				return direct + indirect;
+			}
+			
+			else {
+				//reflection direction formula
+				Vector formula_transparent = ray.u - 2 * N * dot( ray.u, N );
+				formula_transparent.normalize();
+
+				Vector newP =  P + 1e-4 * N;
+
+				//recursive call as the TA said
+				Ray new_ray = Ray( newP, formula_transparent );
+				ray_depth--;
+				return getColour( new_ray, ray_depth, light_pos, I );
+			}
+		}
+	
+		return Vector(0, 0, 0);
+	}
+
+	int Shadow_effect( const Vector& P, Vector light_pos ){
+		//formulas from the lecture notes
+		double light_distance = ( light_pos - P ).norm();
+		Vector direction = light_pos - P; //.normalize();
+		direction.normalize();
+		Vector precision = P + 1e-4 * direction;
+		Ray shadow = Ray( precision, direction );
+		int object_id;
+		Vector localN, localP, colour;
+		
+		if ( intersect( shadow, localP, localN, object_id, colour ) ){
+			double prime = ( localP - P ).norm();
+			if ( light_distance > prime ) //we need shadow
+				return 1;
+		}
+		return -1;  //no shadow
+	}
 };
 
-// class Scene{   ASTA NU E TERMINATA
-// 	public:
-// 	Scene(){};
-// 	void add(const Sphere &s) { objects.push_back(s) };
-// 	bool intersect( const Ray& r, Vector &P, Vector &N, double& t, double& object_id ){
-// 		vool result = false;
-// 		for ( int i = 0; i< objects.size(); i++ ){
-// 			if ( objects[i]. intersect(r, localP, localN, localt)) {
-			// 	result = true;
-			// 	if( localt < t){
-			// 		t = localt;
-			// 		P = localP;
-			// 		N = localN;
-			//		object_id = ....
-			// 	}
-			// }
-// 		}
-// 	}
-// 	std::vector<Sphere> objects;
-// };
 
 int main() {
 	int W = 512;
 	int H = 512;
-	Vector camera_origin(0, 0, 55);
-	double fov = 60 * PI / 180.;
-	Sphere S(Vector (0, 0, 0), 10);
+	Scene scene;
+
+	//ball in the middle
+	//just for the sake of example, we take one ball to be the mirror and one to be solid
+    scene.add( Sphere( Vector( -20, -10, 6 ), 10, Vector( 0.102, 0.255, 0.541 ), false, true ) );
+	scene.add( Sphere( Vector( 20, -10, 6 ), 10, Vector( 0.941, 0.627, 0.949 ), false, true ) ); //added 2 balls to see the difference in shadow and lter for mirror
+	scene.add( Sphere( Vector( 0, -10, 6 ), 10, Vector( 0.89, 0.902, 0.278  ), true, false ) );
+
+    //4 spheres each of them being a wall
+	scene.add( Sphere( Vector( -100000, 0, 0 ), 99965, Vector( 0.779, 0.378, 0.752 ), false, false)); //left
+	scene.add( Sphere( Vector( 0, 100000, 0 ), 99965, Vector( 0.125, 0.332, 0.777 ), false, false)); //top
+	scene.add( Sphere( Vector( 100000, 0, 0 ), 99965, Vector( 0.223, 0.677, 0.020 ), false, false)); //right
+	scene.add( Sphere( Vector(0, -100010, 0), 99990, Vector( 0.300, 0.400, 0.700 ), false, false)); //down
+	scene.add( Sphere( Vector( 0, 0, -100000 ), 99970, Vector( 0.273, 0.494, 0.453 ), false, false)); //back
+	scene.add( Sphere( Vector( 0, 0, 100050 ), 99970, Vector( 0.780, 0.094, 0.298 ), false, false)); //behind
+
+	Vector camera_origin(0, 0, 72); 
+
+	double fov = 60 * M_PI / 180.;
+	//Sphere S(Vector (0, 0, 0), 10, Vector(1, 1, 1));
 	Vector albedo(1, 1, 1);
-	double I = 1E7;
+	double I = 200000;
 	//double I = 1.0;
 	Vector light_pos( -10, 20, 40 );
 
 	std::vector<unsigned char> image(W * H * 3, 0);
-	for (int i = 0; i < H; i++) {
-		for (int j = 0; j < W; j++) {
 
-			double d = -W / (2. * tan(fov / 2 ) );
-			Vector r_dir(j - W / 2 + 0.5, H / 2 - i + 0.5 , d);
-			r_dir.normalize();
-			Ray r( camera_origin, r_dir );
-			Vector P, N;
-			if ( S.intersect(r, P, N) ){				
-				Vector lightDir = light_pos - P;
-				double d2 = lightDir.norm2();
-				//std::cout<<"Haha"; 
-				lightDir.normalize(); 
-				//have to take care of the shadowing as well
-				//epsilon 1e-4, P + epsilon * N
-				Vector launch_point = P + 1e-4 * N;
-				//from the lecture notes " launching a ray from point P towards the light source S"
-				Ray shadow( launch_point, lightDir);
+	// #pragma omp parallel for schedule(dynamic, 1)
+	// for (int i = 0; i < H; i++) {
+	// 	for (int j = 0; j < W; j++) {
 
-				Vector randomvar1, randomvar2;
-				bool visibility_term = S.intersect( shadow, randomvar1, randomvar2 );
-				if ( visibility_term == true )  //we do not apply the color
-					continue;
+	// 		double d = -W / (2. * tan(fov / 2 ) );
+	// 		Vector r_dir(j - W / 2 + 0.5, H / 2 - i + 0.5 , d);
+	// 		r_dir.normalize();
+	// 		Ray r( camera_origin, r_dir );
+	// 		Vector P, N;
+	// 		Vector albedo;
+	// 		int object_id;
+	// 		// if ( scene.intersect(r, P, N, object_id, albedo) ){				
+	// 		// 	Vector lightDir = light_pos - P;
+	// 		// 	double d2 = lightDir.norm2();
+	// 		// 	//std::cout<<"Haha"; 
+	// 		// 	lightDir.normalize(); 
+	// 		// 	//have to take care of the shadowing as well
+	// 		// 	//epsilon 1e-4, P + epsilon * N
+	// 		// 	Vector launch_point = P + 1e-4 * N;
+	// 		// 	//from the lecture notes " launching a ray from point P towards the light source S"
+	// 		// 	Ray shadow( launch_point, lightDir);
 
-				Vector color = I / (4 * PI * d2) * albedo / PI * std::max(0.0, dot(N, lightDir));
+	// 		// 	// Vector randomvar1, randomvar2;
+	// 		// 	// bool visibility_term = S.intersect( shadow, randomvar1, randomvar2 );
+	// 		// 	// if ( visibility_term == true )  //we do not apply the color
+	// 		// 	// 	continue;
 
-				image[(i * W + j) * 3 + 0] = std::min(255., color[0]);
-				image[(i * W + j) * 3 + 1] = std::min(255., color[1]);
-				image[(i * W + j) * 3 + 2] = std::min(255., color[2]);
-			}
-		}
+	// 		Vector color = scene.getColour( r, 5, light_pos, I );
+	// 		//Vector color_sh = I / (4 * PI * d2) * albedo / PI * std::max(0.0, dot(N, lightDir));
+
+	// 		// 	Vector color = scene.getColour( )
+	// 		double color1 = std::pow( color[0], 1 / 2.2 ) * 255;
+	// 		double color2 = std::pow( color[1], 1 / 2.2 ) * 255;
+	// 		double color3 = std::pow( color[2], 1 / 2.2 ) * 255;
+
+
+	// 		image[(i * W + j) * 3 + 0] = std::min(255., color1 );
+	// 		image[(i * W + j) * 3 + 1] = std::min(255., color2 );
+	// 		image[(i * W + j) * 3 + 2] = std::min(255., color3 );
+	// 		//}
+	// 	}
+	// }
+	int NB_PATHS = 200;
+
+	#pragma omp parallel for schedule(dynamic, 1)
+	for ( int i = 0; i < H; i++ ) {
+    	for ( int j = 0; j < W; j++ ) {  //page 32 in the lecture notes
+        	Vector pixelColor( 0., 0., 0. );
+
+        	for ( int k = 0; k < NB_PATHS; k++ ) {
+            	double d = -W / ( 2. * tan( fov / 2 ) );  //Computing the direction of rays page 15
+            	double X = uniform( engine ), Y = uniform( engine );
+            
+            	Vector rand_dir( j - W / 2 + X, H / 2 - i + Y, d );
+            	rand_dir.normalize();
+
+            	Ray ray(camera_origin, rand_dir);
+            	pixelColor = pixelColor + scene.getColour( ray, 5, light_pos, I);
+        	}
+        
+        	double color1 = std::pow( pixelColor[0] / NB_PATHS, 1 / 2.2) * 255;
+        	double color2 = std::pow( pixelColor[1] / NB_PATHS, 1 / 2.2) * 255;
+        	double color3 = std::pow( pixelColor[2] / NB_PATHS, 1 / 2.2) * 255;
+
+        	image[(i * W + j) * 3 + 0] = std::min(255., color1);
+        	image[(i * W + j) * 3 + 1] = std::min(255., color2);
+        	image[(i * W + j) * 3 + 2] = std::min(255., color3);
+    	}
 	}
 	stbi_write_png("image.png", W, H, 3, &image[0], 0);
 
 	return 0;
 }
-
-/*
-scene.add(Sphere(Vector(0, -1000, 0), 900, Vector()))
-*/
