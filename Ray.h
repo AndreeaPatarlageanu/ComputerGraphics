@@ -1,12 +1,14 @@
 #ifndef RAY_H
 #define RAY_H
+
 #include "Vector.h"
 
 class Ray {
-	public:
-		Ray( const Vector& O, const Vector& u) : origin(O), u(u) {};
-		Vector origin;
-		Vector u;
-	};
+public:
+    Ray(const Vector& O, const Vector& u, double t = 0) : origin(O), u(u), t(t) {}  //added t for motion blur
+    Vector origin;
+    Vector u;
+    double t;
+};
 
-#endif
+#endif // RAY_H

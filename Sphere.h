@@ -5,8 +5,8 @@
 
 class Sphere {
     public:
-        Sphere( const Vector& C, double R, const Vector& color, bool mirror, bool transparent );
-        Vector C, color;
+        Sphere( const Vector& C, double R, const Vector& color, bool mirror, bool transparent, const Vector& velocity = Vector( ) );
+        Vector C, color, velocity;
         double R;
         bool mirror, transparent;
     

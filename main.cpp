@@ -1,4 +1,5 @@
 #include <vector>
+#include <chrono>
 
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include "stb_image_write.h"
@@ -10,17 +11,16 @@
 
 #define M_PI 3.14159265359
 
-double sqr( double x) {
-	return x * x;
-}
-
 #include <random>
 #include "Vector.h"
 #include "Ray.h"
 #include "Sphere.h"
+#include "Auxiliary.h"
 
 static std::default_random_engine engine(10);  //random seed = 10
 static std::uniform_real_distribution<double> uniform(0, 1);
+
+const double EPSILON = 1e-4;
 
 void boxMuller( double stdev, double &x, double &y ){
 	double r1 = uniform( engine );
@@ -118,44 +118,60 @@ class Scene{
 			Sphere sph = objects[object_id];
 			//in the case it is transparent we need to have a separate case
 			if (sph.transparent == true) {
-				Vector i = ray.u, normal_vec = N;
-				double n1, n2; //these represent the refr indices and we have to give different values for them depending on the situation
-				double angle_i = dot( i, N );
-				bool condition;  //supposes dot(i, N) < 0 in the lectur enotes, we change the mediums
-				if ( angle_i < 0 )
-					condition = true;
+				Vector rayDirection = ray.u;
+				rayDirection.normalize();
+
+				double n1 = 1.0, n2 = 1.5, n; //according to the lectur enotes
+				bool inside;
+				if ( dot(rayDirection, N ) < 0 )
+					inside = true;
 				else
-					condition = false;
-				
-				//now we treat the cases if it enters in the medium or not
-				if ( condition == true ) //from air to glass
-					n1 = 1.0, n2 = 1.5;   //n1 = air, n2 = glass, according to lecture notes
-				else {  //glass to air
-					n1 = 1.5, n2 = 1.0;
-					normal_vec = ( -1.0 ) * N;
-					angle_i = ( -1 ) * angle_i;
+					inside = false;
+
+				Vector normal;
+				if ( inside == true ){
+					normal = N;
+					n = n1 / n2;
+				}
+				else{
+					normal = (-1) * N;
+					n = n2 / n1;
 				}
 				
-				double computation;
-				computation = 1.0 - ( n1 / n2 ) * ( n1 / n2 ) * ( 1.0 - angle_i * angle_i );
-				
-				if ( computation < 0) {
-					//slide 37
-					Vector direction_of_reflection = i - 2 * dot( i, normal_vec ) * normal_vec;
-					direction_of_reflection.normalize();
-					Ray newRay( P + 1e-4 * direction_of_reflection, direction_of_reflection );
+				Vector reflectionDirection = rayDirection - 2 * dot( rayDirection, normal ) * normal;
+				reflectionDirection.normalize();
+
+				double cos, r0, fresnel;
+				cos = (-1) * dot( rayDirection, normal );
+				r0 = pow( ( n1 - n2 ) / ( n1 + n2 ), 2 );
+				fresnel =  r0 + ( 1 - r0 ) * pow( 1 - cos, 5 );
+
+				double decision;
+				decision = 1 - n * n * ( 1 - cos * cos );
+
+				if (decision < 0 ){
+					Ray reflection( P + EPSILON * reflectionDirection, reflectionDirection );
+					return getColour( reflection, ray_depth - 1, light_pos, I );
+				}
+				else{
+					double random;
+					random = uniform( engine );
 					
-					return getColour( newRay, ray_depth - 1, light_pos, I );
-				} 
-				else {
-					double t_N = -sqrt( computation );//slide 39
-					Vector computation2 = i - dot( i, normal_vec ) * normal_vec;
-					Vector t_T = ( n1 / n2) * computation2;
-					Vector direction_of_refraction = t_N * normal_vec + t_T; //* computation2
-					direction_of_refraction.normalize();
-					Ray newRay( P + 1e-4 * direction_of_refraction, direction_of_refraction );
-					
-					return getColour( newRay, ray_depth - 1, light_pos, I );
+					if( random < fresnel ) {  //then we have reflection
+						Ray reflection( P + EPSILON * reflectionDirection, reflectionDirection );
+						return getColour( reflection, ray_depth - 1, light_pos, I );
+					} 
+					else {  //refraction part
+						Vector refractedTg, refractedN, refractionDirection;
+
+						refractedTg = n * ( rayDirection - dot( rayDirection, normal ) * normal );
+						refractedN = (-1) * sqrt( 1 - refractedTg.norm2() ) * normal;
+						refractionDirection = refractedTg + refractedN;
+						refractionDirection.normalize();
+						
+						Ray refraction( P + EPSILON * refractionDirection, refractionDirection );
+						return getColour( refraction, ray_depth - 1, light_pos, I );
+					}
 				}
 			}
 			else if ( sph.mirror == false ) {  //we need to add both direct and indirect lighting
@@ -185,7 +201,10 @@ class Scene{
 			
 			else {
 				//reflection direction formula
-				Vector formula_transparent = ray.u - 2 * N * dot( ray.u, N );
+				N.normalize();
+				Vector debug = ray.u;
+				debug.normalize();
+				Vector formula_transparent = debug - 2 * N * dot( debug, N );
 				formula_transparent.normalize();
 
 				Vector newP =  P + 1e-4 * N;
@@ -227,9 +246,11 @@ int main() {
 
 	//ball in the middle
 	//just for the sake of example, we take one ball to be the mirror and one to be solid
-    scene.add( Sphere( Vector( -20, -10, 6 ), 10, Vector( 0.102, 0.255, 0.541 ), false, true ) );
-	scene.add( Sphere( Vector( 20, -10, 6 ), 10, Vector( 0.941, 0.627, 0.949 ), false, true ) ); //added 2 balls to see the difference in shadow and lter for mirror
-	scene.add( Sphere( Vector( 0, -10, 6 ), 10, Vector( 0.89, 0.902, 0.278  ), true, false ) );
+    // scene.add( Sphere( Vector( -20, -10, 6 ), 10, Vector( 0.102, 0.255, 0.541 ), false, false ) );
+	// scene.add( Sphere( Vector( 20, -10, 6 ), 10, Vector( 0.941, 0.627, 0.949 ), false, false ) ); //added 2 balls to see the difference in shadow and lter for mirror
+	// scene.add( Sphere( Vector( 0, -10, 6 ), 10, Vector( 0.89, 0.902, 0.278  ), false, true ) );
+	scene.add( Sphere( Vector( 0, -10, 6 ), 10, Vector( 0.89, 0.902, 0.278 ), false, false, Vector( 0, 15, 0 ) ) );
+
 
     //4 spheres each of them being a wall
 	scene.add( Sphere( Vector( -100000, 0, 0 ), 99965, Vector( 0.779, 0.378, 0.752 ), false, false)); //left
@@ -250,51 +271,11 @@ int main() {
 
 	std::vector<unsigned char> image(W * H * 3, 0);
 
-	// #pragma omp parallel for schedule(dynamic, 1)
-	// for (int i = 0; i < H; i++) {
-	// 	for (int j = 0; j < W; j++) {
+	int NB_PATHS = 120;
 
-	// 		double d = -W / (2. * tan(fov / 2 ) );
-	// 		Vector r_dir(j - W / 2 + 0.5, H / 2 - i + 0.5 , d);
-	// 		r_dir.normalize();
-	// 		Ray r( camera_origin, r_dir );
-	// 		Vector P, N;
-	// 		Vector albedo;
-	// 		int object_id;
-	// 		// if ( scene.intersect(r, P, N, object_id, albedo) ){				
-	// 		// 	Vector lightDir = light_pos - P;
-	// 		// 	double d2 = lightDir.norm2();
-	// 		// 	//std::cout<<"Haha"; 
-	// 		// 	lightDir.normalize(); 
-	// 		// 	//have to take care of the shadowing as well
-	// 		// 	//epsilon 1e-4, P + epsilon * N
-	// 		// 	Vector launch_point = P + 1e-4 * N;
-	// 		// 	//from the lecture notes " launching a ray from point P towards the light source S"
-	// 		// 	Ray shadow( launch_point, lightDir);
+	auto start_time = std::chrono::high_resolution_clock::now();  //this was written using AI
 
-	// 		// 	// Vector randomvar1, randomvar2;
-	// 		// 	// bool visibility_term = S.intersect( shadow, randomvar1, randomvar2 );
-	// 		// 	// if ( visibility_term == true )  //we do not apply the color
-	// 		// 	// 	continue;
-
-	// 		Vector color = scene.getColour( r, 5, light_pos, I );
-	// 		//Vector color_sh = I / (4 * PI * d2) * albedo / PI * std::max(0.0, dot(N, lightDir));
-
-	// 		// 	Vector color = scene.getColour( )
-	// 		double color1 = std::pow( color[0], 1 / 2.2 ) * 255;
-	// 		double color2 = std::pow( color[1], 1 / 2.2 ) * 255;
-	// 		double color3 = std::pow( color[2], 1 / 2.2 ) * 255;
-
-
-	// 		image[(i * W + j) * 3 + 0] = std::min(255., color1 );
-	// 		image[(i * W + j) * 3 + 1] = std::min(255., color2 );
-	// 		image[(i * W + j) * 3 + 2] = std::min(255., color3 );
-	// 		//}
-	// 	}
-	// }
-	int NB_PATHS = 200;
-
-	#pragma omp parallel for schedule(dynamic, 1)
+	#pragma omp parallel for schedule( dynamic, 1)
 	for ( int i = 0; i < H; i++ ) {
     	for ( int j = 0; j < W; j++ ) {  //page 32 in the lecture notes
         	Vector pixelColor( 0., 0., 0. );
@@ -307,6 +288,7 @@ int main() {
             	rand_dir.normalize();
 
             	Ray ray(camera_origin, rand_dir);
+				ray.t = k / ( double ) NB_PATHS;  //randomly select the time parameter
             	pixelColor = pixelColor + scene.getColour( ray, 5, light_pos, I);
         	}
         
@@ -319,6 +301,13 @@ int main() {
         	image[(i * W + j) * 3 + 2] = std::min(255., color3);
     	}
 	}
+
+	auto end_time = std::chrono::high_resolution_clock::now();
+    
+    // Calculate the duration
+    std::chrono::duration<double> elapsed = end_time - start_time;
+    std::cout << "Rendering time (in parallel): " << elapsed.count() << " seconds" << std::endl;  //these last 3 lines were also written using AI
+
 	stbi_write_png("image.png", W, H, 3, &image[0], 0);
 
 	return 0;
