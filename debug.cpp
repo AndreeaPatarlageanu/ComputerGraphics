@@ -181,46 +181,6 @@ class Scene{
 					Ray refracted_ray(P, refractedDir);
 					return getColour(refracted_ray, ray_depth - 1, light_pos, I);
 
-
-				// Vector i = ray.u, normal_vec = N;
-				// double n1, n2; //these represent the refr indices and we have to give different values for them depending on the situation
-				// double angle_i = dot( i, N );
-				// bool condition;  //supposes dot(i, N) < 0 in the lectur enotes, we change the mediums
-				// if ( angle_i < 0 )
-				// 	condition = true;
-				// else
-				// 	condition = false;
-				
-				// //now we treat the cases if it enters in the medium or not
-				// if ( condition == true ) //from air to glass
-				// 	n1 = 1.0, n2 = 1.5;   //n1 = air, n2 = glass, according to lecture notes
-				// else {  //glass to air
-				// 	n1 = 1.5, n2 = 1.0;
-				// 	normal_vec = ( -1.0 ) * N;
-				// 	angle_i = ( -1 ) * angle_i;
-				// }
-				
-				// double computation;
-				// computation = 1.0 - ( n1 / n2 ) * ( n1 / n2 ) * ( 1.0 - angle_i * angle_i );
-				
-				// if ( computation < 0) {
-				// 	//slide 37
-				// 	Vector direction_of_reflection = i - 2 * dot( i, normal_vec ) * normal_vec;
-				// 	direction_of_reflection.normalize();
-				// 	Ray newRay( P + 1e-4 * direction_of_reflection, direction_of_reflection );
-					
-				// 	return getColour( newRay, ray_depth - 1, light_pos, I );
-				// } 
-				// else {
-				// 	double t_N = -sqrt( computation );//slide 39
-				// 	Vector computation2 = i - dot( i, normal_vec ) * normal_vec;
-				// 	Vector t_T = ( n1 / n2) * computation2;
-				// 	Vector direction_of_refraction = t_N * normal_vec + t_T; //* computation2
-				// 	direction_of_refraction.normalize();
-				// 	Ray newRay( P + 1e-4 * direction_of_refraction, direction_of_refraction );
-					
-				// 	return getColour( newRay, ray_depth - 1, light_pos, I );
-				// }
 			}
 			else if ( sph.mirror == false ) {
 
@@ -281,9 +241,9 @@ int main() {
 
 	//ball in the middle
 	//just for the sake of example, we take one ball to be the mirror and one to be solid
-    scene.add( Sphere( Vector( -20, -10, 6 ), 10, Vector( 0.102, 0.255, 0.541 ), false, true ) );
-	scene.add( Sphere( Vector( 20, -10, 6 ), 10, Vector( 0.941, 0.627, 0.949 ), false, true ) ); //added 2 balls to see the difference in shadow and lter for mirror
-	scene.add( Sphere( Vector( 0, -10, 6 ), 10, Vector( 0.89, 0.902, 0.278  ), false, true ) );
+    //scene.add( Sphere( Vector( -12, -10, 6 ), 10, Vector( 0.102, 0.255, 0.541 ), true, false ) );
+	//scene.add( Sphere( Vector( 20, -10, 6 ), 10, Vector( 0.941, 0.627, 0.949 ), true, false ) ); //added 2 balls to see the difference in shadow and lter for mirror
+	scene.add( Sphere( Vector( 0, -10, 6 ), 10, Vector( 0.89, 0.902, 0.278  ), false, false ) );
 
     //4 spheres each of them being a wall
 	scene.add( Sphere( Vector( -100000, 0, 0 ), 99965, Vector( 0.779, 0.378, 0.752 ), false, false)); //left
@@ -298,11 +258,13 @@ int main() {
 	double fov = 60 * PI / 180.;
 	//Sphere S(Vector (0, 0, 0), 10, Vector(1, 1, 1));
 	Vector albedo(1, 1, 1);
-	double I = 80000;
+	double I = 170000;
 	//double I = 1.0;
 	Vector light_pos( -10, 20, 40 );
 
 	std::vector<unsigned char> image(W * H * 3, 0);
+	auto start_time = std::chrono::high_resolution_clock::now();  //this was written using AI
+
 	#pragma omp parallel for schedule(static)
 	for (int i = 0; i < H; i++) {
 		for (int j = 0; j < W; j++) {
@@ -330,6 +292,12 @@ int main() {
 			//}
 		}
 	}
+	auto end_time = std::chrono::high_resolution_clock::now();
+    
+    // Calculate the duration
+    std::chrono::duration<double> elapsed = end_time - start_time;
+    std::cout << "Rendering time (in parallel): " << elapsed.count() << " seconds" << std::endl;  //these last 3 lines were also written using AI
+
 	stbi_write_png("image.png", W, H, 3, &image[0], 0);
 
 	return 0;

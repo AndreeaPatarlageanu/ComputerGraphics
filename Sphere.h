@@ -2,15 +2,16 @@
 
 #include "Vector.h"
 #include "Ray.h"
+#include "Geometry.h"
 
-class Sphere {
+class Sphere : public Geometry{
     public:
         Sphere( const Vector& C, double R, const Vector& color, bool mirror, bool transparent, const Vector& velocity = Vector( ) );
-        Vector C, color, velocity;
+        Vector C, velocity;
         double R;
-        bool mirror, transparent;
+        //bool mirror, transparent;
     
-        bool intersect( const Ray& r, Vector &P, Vector &N ) const;
+        bool intersect( const Ray& r, Vector &P, Vector &N ) const override;
 
 };
 

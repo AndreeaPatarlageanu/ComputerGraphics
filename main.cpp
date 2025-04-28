@@ -16,6 +16,7 @@
 #include "Ray.h"
 #include "Sphere.h"
 #include "Auxiliary.h"
+#include "mesh.h"
 
 static std::default_random_engine engine(10);  //random seed = 10
 static std::uniform_real_distribution<double> uniform(0, 1);
@@ -58,8 +59,11 @@ Vector operator*( const Vector& a, const Vector& b ) {
 class Scene{
 	//int Shadow_effect(const Scene& scene, const Vector& P, Vector light_pos);
 	public:
-	std::vector<Sphere> objects;
-	void add(const Sphere &s) { objects.push_back(s); }
+	//std::vector<Sphere> objects;
+	//void add(const Sphere &s) { objects.push_back(s); }
+	std::vector<Geometry*> objects;
+    void add(Geometry* obj) { objects.push_back(obj); }
+
 	bool intersect( const Ray& r, Vector &P, Vector &N, int& object_id, Vector& color ) {
 		bool result = false;
 		//for this part I received a bit of help from a friend
@@ -67,7 +71,7 @@ class Scene{
 
 		for ( int i = 0; i < objects.size(); i++ ){
 			Vector localP, localN;
-			if ( objects[i]. intersect(r, localP, localN )) {
+			if ( objects[i]->intersect(r, localP, localN )) {
 				double t = ( localP - r.origin ).norm();
 				//result = true;
 				if( t < t_min ){
@@ -76,7 +80,7 @@ class Scene{
 					N = localN;
 					object_id = i;
 					result = true;
-					color = objects[i].color;
+					color = objects[i]->color;
 				}
 			}
 		}
@@ -115,9 +119,10 @@ class Scene{
 		if ( ray_depth <= 0) return Vector(0, 0, 0);
 	
 		if(intersect(ray, P, N, object_id, colour)) {
-			Sphere sph = objects[object_id];
+			//Sphere sph = objects[object_id];
+			Geometry* obj = objects[object_id];
 			//in the case it is transparent we need to have a separate case
-			if (sph.transparent == true) {
+			if (obj->transparent == true) {
 				Vector rayDirection = ray.u;
 				rayDirection.normalize();
 
@@ -174,7 +179,7 @@ class Scene{
 					}
 				}
 			}
-			else if ( sph.mirror == false ) {  //we need to add both direct and indirect lighting
+			else if ( obj->mirror == false ) {  //we need to add both direct and indirect lighting
 				
 				Vector direct(0, 0, 0 ), indirect(0, 0, 0);
 				if ( Shadow_effect( P, light_pos ) != 1 ) {
@@ -246,32 +251,44 @@ int main() {
 
 	//ball in the middle
 	//just for the sake of example, we take one ball to be the mirror and one to be solid
-    // scene.add( Sphere( Vector( -20, -10, 6 ), 10, Vector( 0.102, 0.255, 0.541 ), false, false ) );
-	// scene.add( Sphere( Vector( 20, -10, 6 ), 10, Vector( 0.941, 0.627, 0.949 ), false, false ) ); //added 2 balls to see the difference in shadow and lter for mirror
-	// scene.add( Sphere( Vector( 0, -10, 6 ), 10, Vector( 0.89, 0.902, 0.278  ), false, true ) );
-	scene.add( Sphere( Vector( 0, -10, 6 ), 10, Vector( 0.89, 0.902, 0.278 ), false, false, Vector( 0, 15, 0 ) ) );
+    // scene.add( new Sphere( Vector( -20, -10, 6 ), 10, Vector( 0.102, 0.255, 0.541 ), true, false, Vector( 0, 0, 0 ) ) );
+	// scene.add( new Sphere( Vector( 20, -10, 6 ), 10, Vector( 0.941, 0.627, 0.949 ), true, false, Vector( 0, 0, 0 ) ) ); //added 2 balls to see the difference in shadow and lter for mirror
+	// scene.add( new Sphere( Vector( 0, -10, 6 ), 10, Vector( 0.89, 0.902, 0.278  ), false, false, Vector( 0, 0, 0 ) ) );
+	//scene.add( Sphere( Vector( 0, -10, 6 ), 10, Vector( 0.89, 0.902, 0.278 ), false, false, Vector( 0, 15, 0 ) ) );
 
 
     //4 spheres each of them being a wall
-	scene.add( Sphere( Vector( -100000, 0, 0 ), 99965, Vector( 0.779, 0.378, 0.752 ), false, false)); //left
-	scene.add( Sphere( Vector( 0, 100000, 0 ), 99965, Vector( 0.125, 0.332, 0.777 ), false, false)); //top
-	scene.add( Sphere( Vector( 100000, 0, 0 ), 99965, Vector( 0.223, 0.677, 0.020 ), false, false)); //right
-	scene.add( Sphere( Vector(0, -100010, 0), 99990, Vector( 0.300, 0.400, 0.700 ), false, false)); //down
-	scene.add( Sphere( Vector( 0, 0, -100000 ), 99970, Vector( 0.273, 0.494, 0.453 ), false, false)); //back
-	scene.add( Sphere( Vector( 0, 0, 100050 ), 99970, Vector( 0.780, 0.094, 0.298 ), false, false)); //behind
+	scene.add( new Sphere( Vector( -100000, 0, 0 ), 99965, Vector( 0.779, 0.378, 0.752 ), false, false)); //left
+	scene.add( new Sphere( Vector( 0, 100000, 0 ), 99965, Vector( 0.125, 0.332, 0.777 ), false, false)); //top
+	scene.add( new Sphere( Vector( 100000, 0, 0 ), 99965, Vector( 0.223, 0.677, 0.020 ), false, false)); //right
+	scene.add( new Sphere( Vector(0, -100010, 0), 99990, Vector( 0.300, 0.400, 0.700 ), false, false)); //down
+	scene.add( new Sphere( Vector( 0, 0, -100000 ), 99970, Vector( 0.273, 0.494, 0.453 ), false, false)); //back
+	scene.add( new Sphere( Vector( 0, 0, 100050 ), 99970, Vector( 0.780, 0.094, 0.298 ), false, false)); //behind
 
+	TriangleMesh* mesh = new TriangleMesh( Vector( 1.0, 1.0, 1.0 ), false, false );
+    mesh->readOBJ("cat/cat.obj");
+	mesh->scaleTranslate( 0.5, Vector( 0, -35, 40 ) ); 
+    scene.add( mesh );	
+	// TriangleMesh* testTriangle = new TriangleMesh(Vector(1.0, 0.0, 0.0), false, false);
+	// testTriangle->vertices.push_back(Vector(-10, 0, 20));
+	// testTriangle->vertices.push_back(Vector(10, 0, 20));
+	// testTriangle->vertices.push_back(Vector(0, 15, 20));
+	// TriangleIndices tri(0, 1, 2);
+	// testTriangle->indices.push_back(tri);
+	// scene.add(testTriangle);
+	
 	Vector camera_origin(0, 0, 72); 
 
 	double fov = 60 * M_PI / 180.;
 	//Sphere S(Vector (0, 0, 0), 10, Vector(1, 1, 1));
 	Vector albedo(1, 1, 1);
-	double I = 200000;
+	double I = 140000;
 	//double I = 1.0;
 	Vector light_pos( -10, 20, 40 );
 
 	std::vector<unsigned char> image(W * H * 3, 0);
 
-	int NB_PATHS = 120;
+	int NB_PATHS = 1;
 
 	auto start_time = std::chrono::high_resolution_clock::now();  //this was written using AI
 

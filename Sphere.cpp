@@ -3,8 +3,8 @@
 #include "Sphere.h"
 #include "Auxiliary.h"
 
-Sphere::Sphere( const Vector& C, double R, const Vector& color, bool mirror, bool transparent, const Vector& velocity ) 
-    : C(C), R(R), color(color), mirror(mirror), transparent(transparent), velocity(velocity) {}
+Sphere::Sphere(const Vector& C, double R, const Vector& color, bool mirror, bool transparent, const Vector& velocity) 
+    : Geometry(color, mirror, transparent), C(C), R(R), velocity(velocity) {}
 
 bool Sphere::intersect( const Ray& r, Vector &P, Vector &N ) const{
     Vector center_t = C + velocity * r.t; //added this for motion blur

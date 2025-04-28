@@ -22,7 +22,7 @@ class Vector {
             data[2] /= n;
         }
         double operator[](int i) const { return data[i]; };
-        double operator[](int i) { return data[i]; };
+        double &operator[](int i) { return data[i]; };
         double data[3];
     
         int maximum() {
