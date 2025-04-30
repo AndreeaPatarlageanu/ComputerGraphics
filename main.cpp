@@ -267,7 +267,8 @@ int main() {
 
 	TriangleMesh* mesh = new TriangleMesh( Vector( 1.0, 1.0, 1.0 ), false, false );
     mesh->readOBJ("cat/cat.obj");
-	mesh->scaleTranslate( 0.5, Vector( 0, -35, 40 ) ); 
+	mesh->scaleTranslate( 0.5, Vector( 0, -40, 40 ) ); 
+	mesh->BVHStart();
     scene.add( mesh );	
 	// TriangleMesh* testTriangle = new TriangleMesh(Vector(1.0, 0.0, 0.0), false, false);
 	// testTriangle->vertices.push_back(Vector(-10, 0, 20));
@@ -282,7 +283,7 @@ int main() {
 	double fov = 60 * M_PI / 180.;
 	//Sphere S(Vector (0, 0, 0), 10, Vector(1, 1, 1));
 	Vector albedo(1, 1, 1);
-	double I = 140000;
+	double I = 80000;
 	//double I = 1.0;
 	Vector light_pos( -10, 20, 40 );
 

@@ -21,20 +21,93 @@ public:
     int group;
 };
 
+class BoundingBox{
+public:
+    Vector MinB, MaxB;
+    static constexpr double MAX_CONST = std::numeric_limits<double>::max();
+    BoundingBox() : MinB( MAX_CONST, MAX_CONST, MAX_CONST ),
+                    MaxB( -MAX_CONST, -MAX_CONST, -MAX_CONST ) {}
+
+    BoundingBox( const std::vector<Vector> &vertices ) : BoundingBox() { newVertices( vertices ); }
+    BoundingBox( const std::vector<Vector> &vertices, const std::vector<TriangleIndices>& indices, int first, int last ) : BoundingBox() {
+        int i;
+        for( i = first; i < last; i++ ) {
+            TriangleIndices triangle = indices[i];
+            addVertex( vertices[ triangle.vtxi ] );
+            addVertex( vertices[ triangle.vtxj ] );
+            addVertex( vertices[ triangle.vtxk ] );
+        }
+    }
+
+    void addVertex( const Vector& vertex ) {
+        MinB.data[0] = std::min( MinB[0], vertex.data[0] );
+        MinB.data[1] = std::min( MinB[1], vertex.data[1] );
+        MinB.data[2] = std::min( MinB[2], vertex.data[2] );
+
+        MaxB.data[0] = std::max( MaxB[0], vertex.data[0] );
+        MaxB.data[1] = std::max( MaxB[1], vertex.data[1] );
+        MaxB.data[2] = std::max( MaxB[2], vertex.data[2] );
+    }
+
+    void newVertices( const std::vector<Vector>& vertices ) {
+        int i;
+        for( i = 0; i < vertices.size(); i++ )
+            addVertex( vertices[i] );
+    }
+
+    bool intersect( const Ray& r ) const;
+
+};
+
+//BVH!!!!!!!!!!
+class BVHNode{
+    BoundingBox bbox;
+    BVHNode *leftRecursive, *rightRecursive;
+    int starting_triangle, ending_triangle;
+
+public: 
+    BVHNode(): leftRecursive( NULL ), rightRecursive( NULL ) {};
+    ~BVHNode() {
+        if( leftRecursive != NULL ) delete leftRecursive;
+        if( rightRecursive != NULL ) delete rightRecursive;
+    }
+
+    BVHNode( const std::vector<Vector>& vertices, std::vector<TriangleIndices>& indices, int start, int end );
+
+    void intersect( const Ray& r, std::vector<int>& indices2 );
+};
+
+
+//end bvh
+
+
 class TriangleMesh : public Geometry {
-    public:
+public:
         std::vector<TriangleIndices> indices;
         std::vector<Vector> vertices;
         std::vector<Vector> normals;
         std::vector<Vector> uvs;
         std::vector<Vector> vertexcolors;
+        BoundingBox bbox;
 
-        ~TriangleMesh() {}
-        TriangleMesh( const Vector& color, bool mirror, bool transparent );
+        BVHNode *BVHRoot;
+        bool BVHcase = true, Phong = true;
+
+        ~TriangleMesh() {
+            if( BVHRoot != NULL ) delete BVHRoot;
+        }
+        TriangleMesh( const Vector& color, bool mirror, bool transparent );  //this line to be commented for the BVH
+        //TriangleMesh() : BVHRoot( NULL ){};
         
         void scaleTranslate( double scaleNr, Vector translateNr ); 
 
         bool intersect( const Ray& r, Vector &P, Vector &N ) const override;
+
+        //BVH ones:
+        void BVHStart() {
+            BVHRoot = new BVHNode( vertices, indices, 0, indices.size() );
+        };
+
         
         void readOBJ(const char* obj) {
      
@@ -43,6 +116,7 @@ class TriangleMesh : public Geometry {
      
             FILE* f;
             f = fopen(obj, "r");
+            //bbox = BoundingBox(vertices);
             int curGroup = -1;
             while (!feof(f)) {
                 char line[255];
@@ -207,7 +281,7 @@ class TriangleMesh : public Geometry {
      
             }
             fclose(f);
-     
+            //bbox = BoundingBox( vertices );
         }
         
 };
