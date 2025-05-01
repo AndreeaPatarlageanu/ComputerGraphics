@@ -283,13 +283,13 @@ int main() {
 	double fov = 60 * M_PI / 180.;
 	//Sphere S(Vector (0, 0, 0), 10, Vector(1, 1, 1));
 	Vector albedo(1, 1, 1);
-	double I = 80000;
+	double I = 70000;
 	//double I = 1.0;
 	Vector light_pos( -10, 20, 40 );
 
 	std::vector<unsigned char> image(W * H * 3, 0);
 
-	int NB_PATHS = 1;
+	int NB_PATHS = 30;
 
 	auto start_time = std::chrono::high_resolution_clock::now();  //this was written using AI
 

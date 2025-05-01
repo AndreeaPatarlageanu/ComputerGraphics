@@ -50,8 +50,8 @@ BVHNode::BVHNode( const std::vector<Vector>& vertices, std::vector<TriangleIndic
     ending_triangle = end;
     bbox = BoundingBox( vertices, indices, start, end );
 
-    Vector diag = bbox.MaxB + bbox.MinB;
-    Vector middle_diag = diag * 0.5;
+    Vector diag = bbox.MaxB + bbox.MinB;  //twice the center point so we divide by 2, as in the lecture notes
+    Vector middle_diag = diag * 0.5;  //like this there are less operations => faster
 
     int longest_axis = ( diag[0] >= diag[1] ) ? 
                    ( ( diag[0] >= diag[2]) ? 0 : 2 ) :
