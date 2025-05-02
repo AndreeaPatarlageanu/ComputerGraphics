@@ -1,3 +1,3 @@
-<<<<<<< HEAD
 # ComputerGraphics
+Andreea Patarlageanu
 
